@@ -78,18 +78,5 @@ def extract_data(config=None):
     with open(metadata_file, 'w') as f:
         f.write(f"Extraction timestamp: {datetime.now().isoformat()}\n")
         f.write(f"Successful downloads: {successful_downloads}/{len(URLS)}\n")
-    
-    # Return success if all downloads completed
-    return successful_downloads == len(URLS)
 
 
-if __name__ == "__main__":
-    # Configure logging for standalone execution
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Run the extraction process
-    success = extract_data()
-    print(f"Extraction {'successful' if success else 'failed'}")
