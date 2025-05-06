@@ -1,0 +1,17 @@
+{"timestamp":"2025-05-06T03:17:50.763482","level":"info","event":"DAG bundles loaded: dags-folder, example_dags","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager"}
+{"timestamp":"2025-05-06T03:17:50.763915","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/covid_pipeline_dag.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-05-06T03:17:50.811848Z","level":"info","event":"Task instance is in running state","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:50.812211Z","level":"info","event":" Previous state of the Task instance: queued","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:50.815595Z","level":"info","event":"Current task name:extract_covid_data","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:50.815950Z","level":"info","event":"Dag name:covid19_etl_pipeline","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:50.801631","level":"info","event":"Downloading confirmed data from https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv","logger":"covid_etl.extract"}
+{"timestamp":"2025-05-06T03:17:51.066430","level":"info","event":"Successfully downloaded confirmed data: 289 rows x 1147 columns","logger":"covid_etl.extract"}
+{"timestamp":"2025-05-06T03:17:51.066568","level":"info","event":"Downloading deaths data from https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv","logger":"covid_etl.extract"}
+{"timestamp":"2025-05-06T03:17:51.288920","level":"info","event":"Successfully downloaded deaths data: 289 rows x 1147 columns","logger":"covid_etl.extract"}
+{"timestamp":"2025-05-06T03:17:51.289070","level":"info","event":"Downloading recovered data from https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv","logger":"covid_etl.extract"}
+{"timestamp":"2025-05-06T03:17:51.467507","level":"info","event":"Successfully downloaded recovered data: 274 rows x 1147 columns","logger":"covid_etl.extract"}
+{"timestamp":"2025-05-06T03:17:51.471825","level":"info","event":"Done. Returned value was: True","logger":"airflow.task.operators.airflow.providers.standard.operators.python.PythonOperator"}
+{"timestamp":"2025-05-06T03:17:51.472043","level":"info","event":"Pushing xcom","ti":"RuntimeTaskInstance(id=UUID('0196a399-8869-7a3e-91db-18a74c3826aa'), task_id='extract_covid_data', dag_id='covid19_etl_pipeline', run_id='scheduled__2025-05-06T03:17:49.274870+00:00', try_number=1, map_index=-1, hostname='dfea83ddc14e', context_carrier={}, task=<Task(PythonOperator): extract_covid_data>, bundle_instance=LocalDagBundle(name=dags-folder), max_tries=1, start_date=datetime.datetime(2025, 5, 6, 3, 17, 50, 409907, tzinfo=TzInfo(UTC)), end_date=None, is_mapped=False)","logger":"task"}
+{"timestamp":"2025-05-06T03:17:51.494362Z","level":"info","event":"Task instance in success state","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:51.494747Z","level":"info","event":" Previous state of the Task instance: running","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:51.495061Z","level":"info","event":"Task operator:<Task(PythonOperator): extract_covid_data>","chan":"stdout","logger":"task"}

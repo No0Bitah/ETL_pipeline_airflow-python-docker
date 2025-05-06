@@ -1,0 +1,26 @@
+{"timestamp":"2025-05-06T03:17:52.491396","level":"info","event":"DAG bundles loaded: dags-folder, example_dags","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager"}
+{"timestamp":"2025-05-06T03:17:52.491888","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/covid_pipeline_dag.py","logger":"airflow.models.dagbag.DagBag"}
+{"timestamp":"2025-05-06T03:17:52.542707Z","level":"info","event":"Task instance is in running state","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:52.543126Z","level":"info","event":" Previous state of the Task instance: queued","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:52.544851Z","level":"info","event":"Current task name:transform_covid_data","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:52.545048Z","level":"info","event":"Dag name:covid19_etl_pipeline","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:52.533630","level":"info","event":"Starting data transformation process","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:52.534868","level":"info","event":"Processing confirmed dataset","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:52.673640","level":"info","event":"Reshaped confirmed data: 330327 rows","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:52.676440","level":"info","event":"Processing deaths dataset","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:52.939361","level":"info","event":"Reshaped deaths data: 330327 rows","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:52.941286","level":"info","event":"Processing recovered dataset","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:53.055273","level":"info","event":"Reshaped recovered data: 313182 rows","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:53.055416","level":"info","event":"Merging datasets","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:53.262006","level":"info","event":"Creating calculated metrics","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:55.105493","level":"info","event":"Saved main transformed dataset: 330327 rows","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:55.105618","level":"info","event":"Creating country-level aggregation","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:56.076046","level":"info","event":"Saved country-level dataset: 229743 rows","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:56.076179","level":"info","event":"Calculating daily changes","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:58.416371","level":"info","event":"Saved daily changes dataset: 330327 rows","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:58.429414","level":"info","event":"Data transformation completed successfully","logger":"covid_etl.transform"}
+{"timestamp":"2025-05-06T03:17:58.444579","level":"info","event":"Done. Returned value was: True","logger":"airflow.task.operators.airflow.providers.standard.operators.python.PythonOperator"}
+{"timestamp":"2025-05-06T03:17:58.444803","level":"info","event":"Pushing xcom","ti":"RuntimeTaskInstance(id=UUID('0196a399-886a-74b5-a974-4e31330547b4'), task_id='transform_covid_data', dag_id='covid19_etl_pipeline', run_id='scheduled__2025-05-06T03:17:49.274870+00:00', try_number=1, map_index=-1, hostname='dfea83ddc14e', context_carrier={}, task=<Task(PythonOperator): transform_covid_data>, bundle_instance=LocalDagBundle(name=dags-folder), max_tries=1, start_date=datetime.datetime(2025, 5, 6, 3, 17, 52, 141571, tzinfo=TzInfo(UTC)), end_date=None, is_mapped=False)","logger":"task"}
+{"timestamp":"2025-05-06T03:17:58.465970Z","level":"info","event":"Task instance in success state","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:58.466346Z","level":"info","event":" Previous state of the Task instance: running","chan":"stdout","logger":"task"}
+{"timestamp":"2025-05-06T03:17:58.466619Z","level":"info","event":"Task operator:<Task(PythonOperator): transform_covid_data>","chan":"stdout","logger":"task"}
