@@ -1,26 +1,27 @@
 """
-COVID-19 ETL Pipeline - Data Transformation Module
+COVID-19 ETL Pipeline - Data Loading Module
 
-This module transforms raw COVID-19 data into analytics-ready formats,
-creating processed datasets that are suitable for loading into a database.
+This module loads the transformed COVID-19 data into a PostgreSQL database
+and creates the necessary schema, indexes, and views for analytics.
 """
 
 import os
 import logging
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-
+from datetime import datetime
+from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.exceptions import AirflowException
+from sqlalchemy import create_engine
 
 # Set up logging
-logger = logging.getLogger("covid_etl.transform")
+logger = logging.getLogger("covid_etl.load")
 
-def transform_data(config=None):
+def load_data(config=None):
     """
-    Transform raw COVID-19 data into analytics-ready formats.
+    Load transformed COVID-19 data into PostgreSQL database.
     
     Returns:
-        bool: True if transformation was successful, False otherwise
+        bool: True if loading was successful, False otherwise
     """
     try:
         if config is None:
@@ -31,140 +32,287 @@ def transform_data(config=None):
                 logger.error("No config provided and couldn't import CONFIG")
                 return False
             
-        raw_dir = config['raw_data_path']
         processed_dir = config['processed_data_path']
-        os.makedirs(processed_dir, exist_ok=True)
+        conn_id = config['postgres_conn_id']
         
-        logger.info("Starting data transformation process")
+        logger.info(f"Starting data loading process to PostgreSQL database using connection: {conn_id}")
         
-        # Step 1: Read and reshape each dataset
-        datasets = {}
-        for category in ['confirmed', 'deaths', 'recovered']:
-            file_path = os.path.join(raw_dir, f"{category}.csv")
+        # Get PostgreSQL connection using Airflow's PostgresHook
+        pg_hook = PostgresHook(postgres_conn_id=conn_id)
+        conn = pg_hook.get_conn()
+        conn.autocommit = False
+        cursor = conn.cursor()
+        
+        # Create tables if they don't exist
+        create_database_schema(cursor)
+        
+        # Create SQLAlchemy engine for pandas to_sql
+        engine = pg_hook.get_sqlalchemy_engine()
+
+        
+        # Dictionary of files to load
+        files_to_load = {
+            'covid_data_transformed.csv': 'full_data',
+            'covid_data_by_country.csv': 'country_summary',
+            'covid_daily_changes.csv': 'daily_changes'
+        }
+        
+        rows_loaded = 0
+        
+        # Process each file
+        for file_name, table_name in files_to_load.items():
+            file_path = os.path.join(processed_dir, file_name)
+            logger.info(f"file path is {file_path}")
+
+
             
             if not os.path.exists(file_path):
-                logger.warning(f"Raw data file not found: {file_path}")
+                logger.warning(f"Processed data file not found: {file_path}")
                 continue
                 
-            logger.info(f"Processing {category} dataset")
+            logger.info(f"Loading {file_name} into {table_name} table")
             
-            # Read the raw data
+            # Read the CSV file
             df = pd.read_csv(file_path)
+            logger.info(f"CSV read complete. Shape: {df.shape}")
             
-            # Reshape from wide to long format
-            id_vars = ['Province/State', 'Country/Region', 'Lat', 'Long']
-            df_long = pd.melt(
-                df, 
-                id_vars=id_vars,
-                var_name='date', 
-                value_name=category
-            )
+            # Clean column names for PostgreSQL compatibility
+            df.columns = [col.replace('/', '_').replace(' ', '_').lower() for col in df.columns]
             
-            # Convert date string to datetime
-            df_long['date'] = pd.to_datetime(df_long['date'], format='%m/%d/%y')
+            # Convert date formats
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
             
-            # Store the processed dataset
-            datasets[category] = df_long
-            logger.info(f"Reshaped {category} data: {len(df_long)} rows")
+            # # Check if the table exists before deleting
+            # exists = check_if_table_exists(pg_hook, table_name)
+            # if exists:
+            #     logger.info(f"Deleting existing data from table: {table_name}")
+            #     pg_hook.run(f"DELETE FROM {table_name}")
+            # else:
+            #     logger.warning(f"Table {table_name} does not exist; skipping DELETE")
+            pg_hook.run(f"DROP TABLE IF EXISTS {table_name} CASCADE")
+
+            logger.info(f"Creating {table_name} table and loading {len(df)} rows")
+            df.to_sql(table_name, engine, if_exists='replace', index=False)
+
+            
+            # Get row count
+            result = pg_hook.get_records(f"SELECT COUNT(*) FROM {table_name}")
+            count = result[0][0]
+            logger.info(f"Loaded {count} rows into {table_name}")
+            rows_loaded += count
+
+
         
-        # Step 2: Merge the datasets
-        logger.info("Merging datasets")
-        if 'confirmed' not in datasets:
-            logger.error("Required 'confirmed' dataset missing")
-            return False
-            
-        transformed_data = datasets['confirmed']
+        # Create analytical views
+        create_analytical_views(pg_hook)
         
-        # Merge deaths data if available
-        if 'deaths' in datasets:
-            transformed_data = pd.merge(
-                transformed_data, 
-                datasets['deaths'][['Province/State', 'Country/Region', 'date', 'deaths']],
-                on=['Province/State', 'Country/Region', 'date'],
-                how='left'
-            )
+        # Create indexes for performance
+        create_indexes(pg_hook)
+        
+        # Check if etl_metadata table exists before inserting
+        if check_if_table_exists(pg_hook, 'etl_metadata'):
+            # Save load metadata in the database
+            pg_hook.run("""
+            INSERT INTO etl_metadata (operation, timestamp, details)
+            VALUES (%s, %s, %s)
+            """, parameters=('load', datetime.now().isoformat(), f'Total rows loaded: {rows_loaded}'))
         else:
-            transformed_data['deaths'] = 0
-            
-        # Merge recovered data if available
-        if 'recovered' in datasets:
-            transformed_data = pd.merge(
-                transformed_data, 
-                datasets['recovered'][['Province/State', 'Country/Region', 'date', 'recovered']],
-                on=['Province/State', 'Country/Region', 'date'],
-                how='left'
-            )
-        else:
-            transformed_data['recovered'] = 0
+            logger.warning("etl_metadata table does not exist. Skipping metadata insertion.")
         
-        # Fill missing values
-        transformed_data = transformed_data.fillna({
-            'deaths': 0,
-            'recovered': 0,
-            'Province/State': 'Unknown'
-        })
+        # Commit changes and close connection
+        conn.commit()
+        conn.close()
         
-        # Step 3: Create calculated fields
-        logger.info("Creating calculated metrics")
-        transformed_data['active'] = transformed_data['confirmed'] - transformed_data['deaths'] - transformed_data['recovered']
-        transformed_data['mortality_rate'] = np.where(
-            transformed_data['confirmed'] > 0,
-            (transformed_data['deaths'] / transformed_data['confirmed']) * 100,
-            0
-        )
-        
-        # Step 4: Save the main transformed dataset
-        output_file = os.path.join(processed_dir, 'covid_data_transformed.csv')
-        transformed_data.to_csv(output_file, index=False)
-        logger.info(f"Saved main transformed dataset: {len(transformed_data)} rows")
-        
-        # Step 5: Create country-level aggregation
-        logger.info("Creating country-level aggregation")
-        country_data = transformed_data.groupby(['Country/Region', 'date']).agg({
-            'confirmed': 'sum',
-            'deaths': 'sum',
-            'recovered': 'sum',
-            'active': 'sum'
-        }).reset_index()
-        
-        # Calculate country-level mortality rate
-        country_data['mortality_rate'] = np.where(
-            country_data['confirmed'] > 0,
-            (country_data['deaths'] / country_data['confirmed']) * 100,
-            0
-        )
-        
-        output_file = os.path.join(processed_dir, 'covid_data_by_country.csv')
-        country_data.to_csv(output_file, index=False)
-        logger.info(f"Saved country-level dataset: {len(country_data)} rows")
-        
-        # Step 6: Calculate daily changes
-        logger.info("Calculating daily changes")
-        # Sort data to prepare for diff calculation
-        transformed_data = transformed_data.sort_values(['Country/Region', 'Province/State', 'date'])
-        
-        # Group by region and calculate daily differences
-        daily_data = transformed_data.copy()
-        for col in ['confirmed', 'deaths', 'recovered']:
-            daily_data[f'new_{col}'] = daily_data.groupby(['Country/Region', 'Province/State'])[col].diff().fillna(0)
-            # Ensure no negative values for new cases (data corrections)
-            daily_data[f'new_{col}'] = daily_data[f'new_{col}'].clip(lower=0)
-        
-        output_file = os.path.join(processed_dir, 'covid_daily_changes.csv')
-        daily_data.to_csv(output_file, index=False)
-        logger.info(f"Saved daily changes dataset: {len(daily_data)} rows")
-        
-        # Save transformation metadata
-        metadata_file = os.path.join(processed_dir, "transformation_metadata.txt")
-        with open(metadata_file, 'w') as f:
-            f.write(f"Transformation timestamp: {datetime.now().isoformat()}\n")
-            f.write(f"Total records processed: {len(transformed_data)}\n")
-            f.write(f"Countries included: {transformed_data['Country/Region'].nunique()}\n")
-            f.write(f"Date range: {transformed_data['date'].min()} to {transformed_data['date'].max()}\n")
-        
-        logger.info("Data transformation completed successfully")
+        logger.info(f"Data loading completed successfully: {rows_loaded} total rows loaded")
         return True
         
     except Exception as e:
-        logger.error(f"Error during data transformation: {str(e)}")
+        logger.error(f"Error during data loading: {str(e)}")
+        if 'conn' in locals() and conn:
+            conn.rollback()
+            conn.close()
+        raise AirflowException(f"Data loading failed: {str(e)}")
+
+def check_if_table_exists(pg_hook, table_name):
+    """
+    Check if a table exists in the database.
+    
+    Args:
+        pg_hook: PostgresHook instance
+        table_name: Name of the table to check
+        
+    Returns:
+        bool: True if the table exists, False otherwise
+    """
+    try:
+        # Query to check if table exists in PostgreSQL
+        query = """
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = %s
+        )
+        """
+        result = pg_hook.get_first(query, parameters=(table_name,))
+        return result[0]
+    except Exception as e:
+        logger.error(f"Error checking if table {table_name} exists: {str(e)}")
         return False
+
+def create_database_schema(cursor):
+    """Create the database schema if it doesn't exist."""
+    try:
+        # Create ETL metadata table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS etl_metadata (
+            id SERIAL PRIMARY KEY,
+            operation TEXT NOT NULL,
+            timestamp TIMESTAMP NOT NULL,
+            details TEXT
+        )
+        """)
+        
+        # Create main COVID data table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS full_data (
+            province_state TEXT,
+            country_region TEXT NOT NULL,
+            lat REAL,
+            long REAL,
+            date DATE NOT NULL,
+            confirmed INTEGER NOT NULL,
+            deaths INTEGER NOT NULL,
+            recovered INTEGER NOT NULL,
+            active INTEGER NOT NULL,
+            mortality_rate REAL,
+            PRIMARY KEY (country_region, province_state, date)
+        )
+        """)
+        
+        # Create country summary table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS country_summary (
+            country_region TEXT NOT NULL,
+            date DATE NOT NULL,
+            confirmed INTEGER NOT NULL,
+            deaths INTEGER NOT NULL,
+            recovered INTEGER NOT NULL,
+            active INTEGER NOT NULL,
+            mortality_rate REAL,
+            PRIMARY KEY (country_region, date)
+        )
+        """)
+        
+        # Create daily changes table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS daily_changes (
+            province_state TEXT,
+            country_region TEXT NOT NULL,
+            lat REAL,
+            long REAL,
+            date DATE NOT NULL,
+            confirmed INTEGER NOT NULL,
+            deaths INTEGER NOT NULL,
+            recovered INTEGER NOT NULL,
+            active INTEGER NOT NULL,
+            mortality_rate REAL,
+            new_confirmed INTEGER,
+            new_deaths INTEGER,
+            new_recovered INTEGER,
+            PRIMARY KEY (country_region, province_state, date)
+        )
+        """)
+        
+        logger.info("Database schema created successfully")
+        
+    except Exception as e:
+        logger.error(f"Error creating database schema: {str(e)}")
+        raise
+
+def create_analytical_views(pg_hook):
+    """Create useful analytical views using PostgresHook."""
+    try:
+        # View for latest global summary
+        pg_hook.run("""
+        CREATE OR REPLACE VIEW vw_latest_global_summary AS
+        SELECT 
+            SUM(confirmed) as total_confirmed,
+            SUM(deaths) as total_deaths,
+            SUM(recovered) as total_recovered,
+            SUM(active) as total_active,
+            (CAST(SUM(deaths) AS FLOAT) / NULLIF(CAST(SUM(confirmed) AS FLOAT), 0)) * 100 as global_mortality_rate
+        FROM country_summary
+        WHERE date = (SELECT MAX(date) FROM country_summary)
+        """)
+        
+        # View for top 10 countries by confirmed cases
+        pg_hook.run("""
+        CREATE OR REPLACE VIEW vw_top_countries AS
+        SELECT 
+            country_region as country,
+            confirmed,
+            deaths,
+            recovered,
+            active,
+            mortality_rate
+        FROM country_summary
+        WHERE date = (SELECT MAX(date) FROM country_summary)
+        ORDER BY confirmed DESC
+        LIMIT 10
+        """)
+        
+        # View for daily global timeline
+        pg_hook.run("""
+        CREATE OR REPLACE VIEW vw_global_daily AS
+        SELECT 
+            date,
+            SUM(confirmed) as total_confirmed,
+            SUM(deaths) as total_deaths,
+            SUM(recovered) as total_recovered,
+            SUM(active) as total_active,
+            SUM(new_confirmed) as new_confirmed,
+            SUM(new_deaths) as new_deaths,
+            SUM(new_recovered) as new_recovered
+        FROM daily_changes
+        GROUP BY date
+        ORDER BY date
+        """)
+        
+        logger.info("Analytical views created successfully")
+        
+    except Exception as e:
+        logger.error(f"Error creating analytical views: {str(e)}")
+        raise
+
+def create_indexes(pg_hook):
+    """Create indexes for query performance."""
+    try:
+        # Indexes for covid_full_data
+        pg_hook.run("CREATE INDEX IF NOT EXISTS idx_full_country ON full_data(country_region)")
+        pg_hook.run("CREATE INDEX IF NOT EXISTS idx_full_date ON full_data(date)")
+        
+        # Indexes for covid_country_summary
+        pg_hook.run("CREATE INDEX IF NOT EXISTS idx_summary_date ON country_summary(date)")
+        
+        # Indexes for covid_daily_changes
+        pg_hook.run("CREATE INDEX IF NOT EXISTS idx_changes_country ON daily_changes(country_region)")
+        pg_hook.run("CREATE INDEX IF NOT EXISTS idx_changes_date ON daily_changes(date)")
+        
+        logger.info("Database indexes created successfully")
+        
+    except Exception as e:
+        logger.error(f"Error creating database indexes: {str(e)}")
+        raise
+
+
+
+if __name__ == "__main__":
+    # Configure logging for standalone execution
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Run the loading process
+    success = load_data()
+    print(f"Data loading {'successful' if success else 'failed'}")

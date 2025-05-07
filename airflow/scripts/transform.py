@@ -168,15 +168,3 @@ def transform_data(config=None):
     except Exception as e:
         logger.error(f"Error during data transformation: {str(e)}")
         return False
-
-
-if __name__ == "__main__":
-    # Configure logging for standalone execution
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Run the transformation process
-    success = transform_data()
-    print(f"Transformation {'successful' if success else 'failed'}")
