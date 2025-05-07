@@ -303,16 +303,3 @@ def create_indexes(pg_hook):
     except Exception as e:
         logger.error(f"Error creating database indexes: {str(e)}")
         raise
-
-
-
-if __name__ == "__main__":
-    # Configure logging for standalone execution
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Run the loading process
-    success = load_data()
-    print(f"Data loading {'successful' if success else 'failed'}")
